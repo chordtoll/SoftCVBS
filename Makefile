@@ -88,4 +88,4 @@ gen-calibrate: gen-calibrate.c
 	$(CC) $(CCOPT) $< -o $@ $(CCLIBS)	
 
 clean:
-	rm -f *.cvbs *.raw *.data *.new.mp4 *wave.mp4 ntsc-encode ntsc-decode
+	rm -f *.cvbs *.raw *.data *.new.mp4 *wave.mp4 ntsc-encode ntsc-decode deinterlace
