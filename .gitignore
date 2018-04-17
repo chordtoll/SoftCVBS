@@ -50,3 +50,11 @@ modules.order
 Module.symvers
 Mkfile.old
 dkms.conf
+
+*.mp4
+*.mp3
+*.wav
+*.cvbs
+*.dat
+*.raw
+*.rgb
