@@ -58,3 +58,7 @@ dkms.conf
 *.dat
 *.raw
 *.rgb
+
+deinterlace
+ntsc-encode
+ntsc-decode
