@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <getopt.h> /* getopt */
+#include <errno.h>
 #define PI 3.14159265
 #define FRAME_RATE  (60*(1000.0/1001))
 #define LINE_RATE   (262.5*FRAME_RATE)
@@ -23,6 +25,11 @@
 #define ST_EQUAL 2
 #define ST_VSYNC 3
 #define ST_BURST 4
+
+double o_agc_attack=0.1;
+double o_agc_decay=0.00001;
+double o_agc_white=1276;
+double o_agc_black=340;
 
 double sintab[4096];
 
@@ -49,30 +56,28 @@ double CTIME2STIME(int stime) {
   return stime*SAMPLE_RATE/COLOR_RATE;
 }
 
-double rm=0;
-double rn=999;
-double gm=0;
-double gn=999;
-double bm=0;
-double bn=999;
-double yvm=0;
-double yvn=999;
 double ivm=0;
 double ivn=999;
 double qm=0;
 double qn=999;
 
-void maxp(double val, double*max,double*min,char*lbl) {
-  return;
-  if (val>*max) {
-    *max=val;
-    fprintf(stderr,"%s: (%f,%f)\n",lbl,*max,*min);
+double agc(double y) {
+  if (y<o_agc_black) {
+    o_agc_black-=o_agc_attack;
+  } else {
+    if (o_agc_black<o_agc_white) o_agc_black+=o_agc_decay;
   }
-  if (val<*min) {
-    *min=val;
-    fprintf(stderr,"%s: (%f,%f)\n",lbl,*max,*min);
+  if (y>o_agc_white) {
+    o_agc_white+=o_agc_attack;
+  } else {
+    if (o_agc_black<o_agc_white) o_agc_white-=o_agc_decay;
   }
-
+  double agval=(y-o_agc_black)/(o_agc_white-o_agc_black);
+  if (agval<0)
+    return 0;
+  if (agval>1)
+    return 1;
+  return agval;
 }
 
 char clamp(double val) {
@@ -85,7 +90,7 @@ char clamp(double val) {
 
 int frameno=0;
 int lineno=0;
-
+char Ymin=0xFF;
 void decode_cvbs(FILE *in, FILE *out) {
   double *Yarr=malloc(sizeof(double)*YARLEN);
   double *Iarr=malloc(sizeof(double)*IARLEN);
@@ -195,18 +200,13 @@ void decode_cvbs(FILE *in, FILE *out) {
           Yidx%=YARLEN;
           Iidx%=IARLEN;
           Qidx%=QARLEN;
-          double ey=EY/1276.0;
+          //double ey=EY/1276.0;
+          double ey=agc(EY);
           double ei=EI/1500.0;
           double eq=EQ/1500.0;
-          maxp(ey,&yvm,&yvn,"Ey");
-          maxp(ei,&ivm,&ivn,"Ei");
-          maxp(eq,&qm,&qn,"Eq");
           EG=(ey)+0.956*(ei)+0.621*(eq);
           ER=(ey)-0.272*(ei)-0.647*(eq);
           EB=(ey)-1.106*(ei)+1.703*(eq);
-          maxp(ER,&rm,&rn,"Er");
-          maxp(EG,&gm,&gn,"Eg");
-          maxp(EB,&bm,&bn,"Eb");
           fputc(clamp(ER*256),out);
           fputc(clamp(EG*256),out);
           fputc(clamp(EB*256),out);
@@ -225,11 +225,80 @@ void decode_cvbs(FILE *in, FILE *out) {
   //free(colorbuf);
 }
 
-int main(void) {
+int main(int argc, char **argv) {
+  int c;
+  char* sp;
+  double optval;
+  while (1) 
+  {
+    int option_index = 0;
+    static struct option long_options[] = 
+    {
+      {"agc-attack",     required_argument, NULL,  'a'},
+      {"agc-decay",  required_argument,       NULL,  'd'},
+      {"agc-white",  required_argument,       NULL,  'w'},
+      {"agc-black",  required_argument,       NULL,  'b'},
+      {NULL,      0,                 NULL,    0}
+    };
+
+    c = getopt_long(argc, argv, "-:a:d:w:b:", long_options, &option_index);
+    if (c == -1)
+      break;
+
+    switch (c) 
+    {
+      case 0:
+      printf("long option %s", long_options[option_index].name);
+      if (optarg)
+       printf(" with arg %s", optarg);
+     printf("\n");
+     break;
+
+     case 1:
+     printf("regular argument '%s'\n", optarg);
+     break;
+
+     case 'a':
+     optval=strtod(optarg,&sp);
+     if (sp!=optarg)
+      o_agc_attack=optval;
+     break;
+
+     case 'd':
+     optval=strtod(optarg,&sp);
+     if (sp!=optarg)
+      o_agc_decay=optval;
+     break;
+
+     case 'w':
+     optval=strtod(optarg,&sp);
+     if (sp!=optarg)
+      o_agc_white=optval;
+     break;
+
+     case 'b':
+     optval=strtod(optarg,&sp);
+     if (sp!=optarg)
+      o_agc_black=optval;
+     break;
+
+     case '?':
+     printf("Unknown option %c\n", optopt);
+     break;
+
+     case ':':
+     printf("Missing option for %c\n", optopt);
+     break;
+
+     default:
+     printf("?? getopt returned character code 0%o ??\n", c);
+   }
+ }
+
   //printf("Started\n");
-  for (int i=0;i<4096; i++) {
-    sintab[i]=sin(2*PI/4096*i);
-  }
+ for (int i=0;i<4096; i++) {
+  sintab[i]=sin(2*PI/4096*i);
+}
   FILE *infile=stdin;//fopen("frame.raw","r");
   FILE *outfile=stdout;//fopen("frame.cvbs","w");
   decode_cvbs(infile,outfile);
