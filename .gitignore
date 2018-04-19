@@ -60,6 +60,12 @@ dkms.conf
 *.rgb
 *.png
 
+gen-calibrate
 deinterlace
 ntsc-encode
+ntsc-encode-threading
 ntsc-decode
+encodegood
+encodegoodhex
+encodetest
+threadtest

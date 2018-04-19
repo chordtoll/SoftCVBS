@@ -1,6 +1,14 @@
 CC=gcc
-CCOPT=-std=gnu99 -g
+CCOPT=-std=gnu99 -g -O3
 CCLIBS=-lm
+EXECS=gen-calibrate ntsc-encode-threading ntsc-encode ntsc-decode deinterlace
+
+executables: $(EXECS)
+
+valgrind: gen-calibrate ntsc-encode-threading ntsc-decode
+	valgrind -q --leak-check=full --show-reachable=yes --trace-children=yes --tool=memcheck ./gen-calibrate > /dev/null
+	./gen-calibrate | valgrind -q --leak-check=full --show-reachable=yes --trace-children=yes --tool=memcheck ./ntsc-encode-threading  > /dev/null
+	./gen-calibrate | ./ntsc-encode-threading | valgrind -q --leak-check=full --show-reachable=yes --trace-children=yes --tool=memcheck ./ntsc-decode  > /dev/null
 
 calibrate: gen-calibrate ntsc-encode ntsc-decode
 	./gen-calibrate > calib.data
@@ -8,10 +16,14 @@ calibrate: gen-calibrate ntsc-encode ntsc-decode
 	cat calib.cvbs | ./ntsc-decode	> calib.rgb
 	convert -size "800x16800" -depth 8 calib.rgb calib.png
 
+.PHONY: threadtest
+
 threadtest: ntsc-encode-threading pilot.raw
 	bar pilot.raw | ./ntsc-encode-threading > encodetest
-	cat encodetest | hexdump > threadtest
-	diff threadtest encodegoodhex
+	md5sum encodetest
+	md5sum encodegood
+	#cat encodetest | hexdump > threadtest
+	#diff threadtest encodegoodhex
 
 pilotmerged.mp4: pilot.mp3 pilotwave.mp4
 	ffmpeg -i pilotwave.mp4 -i pilot.mp3 -c:v copy -c:a copy pilotmerged.mp4
@@ -61,22 +73,16 @@ glow.raw: glow.mp4
 	ffmpeg -y -t 00:00:10 -i $< -c:v rawvideo -f rawvideo -vf scale=640:480 -pix_fmt rgb24 $@
 
 pilot.raw: pilot.mp4 
-	ffmpeg -y -ss 00:00:05 -t 00:00:01 -i $< -c:v rawvideo -f rawvideo -vf scale=640:480 -pix_fmt rgb24 $@
+	ffmpeg -y -ss 00:00:05 -t 00:00:10 -i $< -c:v rawvideo -f rawvideo -vf scale=640:480 -pix_fmt rgb24 $@
 
 smpte.raw: smpte.mp4 
 	ffmpeg -y -t 00:00:01 -i $< -c:v rawvideo -f rawvideo -vf scale=640:480 -pix_fmt rgb24 $@
 
-rgb2yiq: rgb2yiq.c
-	$(CC) $(CCOPT) $^ -o $@ $(CCLIBS)
-
-yiq2rgb: yiq2rgb.c
-	$(CC) $(CCOPT) $^ -o $@ $(CCLIBS)
-
 ntsc-encode: ntsc-encode.c rgbyiq.c
 	$(CC) $(CCOPT) $< rgbyiq.c -o $@ $(CCLIBS)
 
-ntsc-encode-threading: ntsc-encode-threading.c rgbyiq.c
-	$(CC) $(CCOPT) $< rgbyiq.c -o $@ $(CCLIBS) -lpthread
+ntsc-encode-threading: ntsc-encode-threading.c rgbyiq.c threadsafe-queue.c threading.c
+	$(CC) $(CCOPT) $^ -o $@ $(CCLIBS) -lpthread
 
 ntsc-decode: ntsc-decode.c
 	$(CC) $(CCOPT) $< -o $@ $(CCLIBS)
@@ -88,4 +94,4 @@ gen-calibrate: gen-calibrate.c
 	$(CC) $(CCOPT) $< -o $@ $(CCLIBS)	
 
 clean:
-	rm -f *.cvbs *.raw *.data *.new.mp4 *wave.mp4 ntsc-encode ntsc-decode deinterlace
+	rm -f *.cvbs *.raw *.data *.new.mp4 *wave.mp4 $(EXECS)
