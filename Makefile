@@ -18,6 +18,9 @@ calibrate: gen-calibrate ntsc-encode ntsc-decode
 
 .PHONY: threadtest
 
+threadbench: ntsc-encode-threading glow.raw
+	bash -c "time (bar glow.raw | ./ntsc-encode-threading > /dev/null)"
+
 threadtest: ntsc-encode-threading pilot.raw
 	bar pilot.raw | ./ntsc-encode-threading > encodetest
 	md5sum encodetest
@@ -70,10 +73,10 @@ smpte.cvbs: smpte.raw ntsc-encode
 	cat $< | ./ntsc-encode > $@
 
 glow.raw: glow.mp4 
-	ffmpeg -y -t 00:00:10 -i $< -c:v rawvideo -f rawvideo -vf scale=640:480 -pix_fmt rgb24 $@
+	ffmpeg -y -t 00:00:30 -i $< -c:v rawvideo -f rawvideo -vf scale=640:480 -pix_fmt rgb24 $@
 
 pilot.raw: pilot.mp4 
-	ffmpeg -y -ss 00:00:05 -t 00:00:10 -i $< -c:v rawvideo -f rawvideo -vf scale=640:480 -pix_fmt rgb24 $@
+	ffmpeg -y -ss 00:00:05 -t 00:00:01 -i $< -c:v rawvideo -f rawvideo -vf scale=640:480 -pix_fmt rgb24 $@
 
 smpte.raw: smpte.mp4 
 	ffmpeg -y -t 00:00:01 -i $< -c:v rawvideo -f rawvideo -vf scale=640:480 -pix_fmt rgb24 $@

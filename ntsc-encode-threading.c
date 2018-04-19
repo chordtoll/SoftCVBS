@@ -26,7 +26,7 @@ typedef struct {
   size_t position;
 } outbuffer;
 
-long scaler(long t) {
+inline long scaler(long t) {
   return t;
 }
 
@@ -100,9 +100,64 @@ void write_line(unsigned char* buf, outbuffer *out, int frameno) {
     rgb2yiq(R,G,B,&Y,&I,&Q);
     //if (fidx!=out->position)
     //fprintf(stderr,"PX FIDX:%lu OPOS:%lu\n",fidx,out->position);
-    double IC=sin(RADIANS_PER_SAMPLE * (out->position + SAMPLES_PER_FRAME*frameno) + (33.0 / 180 * PI));
-    double QC=sin(RADIANS_PER_SAMPLE * (out->position + SAMPLES_PER_FRAME*frameno) + (PI/2)+(33.0 / 180 * PI));
-    bputc(d2c(Y*100+I*IC*100+Q*QC*100),out);
+    
+    // http://lab.polygonal.de/2007/07/18/fast-and-accurate-sinecosine-approximation/
+    //always wrap input angle to -PI..PI
+    double x=RADIANS_PER_SAMPLE * (out->position + SAMPLES_PER_FRAME*frameno) + (33.0 / 180 * PI);
+    double sin;
+    double cos;
+    if (x < -3.14159265)
+        x += 6.28318531;
+    else
+    if (x >  3.14159265)
+        x -= 6.28318531;
+
+    //compute sine
+    if (x < 0)
+    {
+        sin = 1.27323954 * x + .405284735 * x * x;
+        
+        if (sin < 0)
+            sin = .225 * (sin *-sin - sin) + sin;
+        else
+            sin = .225 * (sin * sin - sin) + sin;
+    }
+    else
+    {
+        sin = 1.27323954 * x - 0.405284735 * x * x;
+        
+        if (sin < 0)
+            sin = .225 * (sin *-sin - sin) + sin;
+        else
+            sin = .225 * (sin * sin - sin) + sin;
+    }
+
+    //compute cosine: sin(x + PI/2) = cos(x)
+    x += 1.57079632;
+    if (x >  3.14159265)
+        x -= 6.28318531;
+
+    if (x < 0)
+    {
+        cos = 1.27323954 * x + 0.405284735 * x * x;
+        
+        if (cos < 0)
+            cos = .225 * (cos *-cos - cos) + cos;
+        else
+            cos = .225 * (cos * cos - cos) + cos;
+    }
+    else
+    {
+        cos = 1.27323954 * x - 0.405284735 * x * x;
+
+        if (cos < 0)
+            cos = .225 * (cos *-cos - cos) + cos;
+        else
+            cos = .225 * (cos * cos - cos) + cos;
+    }
+    //double IC=sin(RADIANS_PER_SAMPLE * (out->position + SAMPLES_PER_FRAME*frameno) + (33.0 / 180 * PI));
+    //double QC=sin(RADIANS_PER_SAMPLE * (out->position + SAMPLES_PER_FRAME*frameno) + (PI/2)+(33.0 / 180 * PI));
+    bputc(d2c(Y*100+I*sin*100+Q*cos*100),out);
   }
     //bwrite(BLCK_SRC,sizeof(char),scaler(640),out);
   bwrite(BLNK_SRC,sizeof(char),scaler(18),out);
@@ -185,7 +240,7 @@ void encode_cvbs(char* frame,outbuffer *out, int frameno, tsq *linequeue) {
 
 #define NUM_THREADS 4
 
-int main(void) {
+void encode_main(void) {
   frame_g=malloc(640*480*3);
   unsigned char *outbuf=malloc(SAMPLES_PER_FRAME);
   SYNC_SRC=malloc(scaler(1000));
@@ -226,4 +281,8 @@ int main(void) {
   free(BLCK_SRC);
   free(completedlines_g);
   free(threads);
+}
+
+int main(void) {
+  encode_main();
 }
